@@ -1,6 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
-using Newtonsoft.Json;
 
 namespace Hydro;
 
@@ -20,7 +20,7 @@ public static class HydroHttpResponseExtensions
         {
             throw new ArgumentException("url is not provided", nameof(url));
         }
-        
+
         response.Headers.Append("Hydro-Redirect", new StringValues(url));
     }
 
@@ -36,14 +36,14 @@ public static class HydroHttpResponseExtensions
         {
             throw new ArgumentException("url is not provided", nameof(url));
         }
-        
+
         var data = new
         {
             path = url,
             target = "body",
-            payload
+            payload,
         };
 
-        response.Headers.Append("Hydro-Location", new StringValues(JsonConvert.SerializeObject(data)));
+        response.Headers.Append("Hydro-Location", new StringValues(JsonSerializer.Serialize(data)));
     }
 }

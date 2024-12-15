@@ -1,5 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
 
 namespace Hydro.Services;
 
@@ -22,11 +23,9 @@ public class CookieStorage
 
             if (storage != null)
             {
-                var json = encryption
-                    ? _persistentState.Decompress(storage)
-                    : storage;
+                var json = encryption ? _persistentState.Decompress(storage) : storage;
 
-                return JsonConvert.DeserializeObject<T>(json);
+                return JsonSerializer.Deserialize<T>(json);
             }
         }
         catch
@@ -45,9 +44,9 @@ public class CookieStorage
     /// <summary>
     /// Customizable default JsonSerializerSettings used for complex objects
     /// </summary>
-    public static JsonSerializerSettings JsonSettings = new()
+    public static JsonSerializerOptions JsonSettings = new()
     {
-        ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
     };
 
     internal CookieStorage(HttpContext httpContext, IPersistentState persistentState)
@@ -55,16 +54,13 @@ public class CookieStorage
         _httpContext = httpContext;
         _persistentState = persistentState;
     }
-    
+
     /// <summary>
     /// Stores provided `value` in cookies
     /// </summary>
     public void Set<T>(string key, T value, bool encryption = false, TimeSpan? expiration = null)
     {
-        var options = new CookieOptions
-        {
-            MaxAge = expiration ?? DefaultExpirationTime,
-        };
+        var options = new CookieOptions { MaxAge = expiration ?? DefaultExpirationTime };
 
         Set(key, value, encryption, options);
     }
@@ -78,11 +74,11 @@ public class CookieStorage
 
         if (value != null)
         {
-            var serializedValue = JsonConvert.SerializeObject(value, JsonSettings);
+            var serializedValue = JsonSerializer.Serialize(value, JsonSettings);
             var finalValue = encryption
-                ? _persistentState.Compress(serializedValue) 
+                ? _persistentState.Compress(serializedValue)
                 : serializedValue;
-            
+
             response.Cookies.Append(key, finalValue, options);
         }
         else

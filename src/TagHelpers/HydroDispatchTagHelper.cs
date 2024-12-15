@@ -1,9 +1,9 @@
-﻿using Hydro.Utils;
+﻿using System.Text.Json;
+using Hydro.Utils;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
-using Newtonsoft.Json;
 
 namespace Hydro.TagHelpers;
 
@@ -30,19 +30,19 @@ public sealed class HydroDispatchTagHelper : TagHelper
     /// </summary>
     [HtmlAttributeName(DispatchAttribute)]
     public object Data { get; set; }
-    
+
     /// <summary>
     /// Bind event
     /// </summary>
     [HtmlAttributeName(ScopeAttribute)]
     public Scope Scope { get; set; } = Scope.Parent;
-    
+
     /// <summary>
     /// Triggering event
     /// </summary>
     [HtmlAttributeName(TriggerAttribute)]
     public string BrowserTriggerEvent { get; set; }
-    
+
     /// <summary>
     /// Processes the tag helper
     /// </summary>
@@ -50,28 +50,28 @@ public sealed class HydroDispatchTagHelper : TagHelper
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(output);
-        
+
         var data = new
         {
             name = GetFullTypeName(Data.GetType()),
             data = Base64.Serialize(Data),
-            scope = Scope
+            scope = Scope,
         };
-        
-        output.Attributes.Add(new(
-            "x-hydro-dispatch",
-            new HtmlString(JsonConvert.SerializeObject(data)),
-            HtmlAttributeValueStyle.SingleQuotes)
+
+        output.Attributes.Add(
+            new(
+                "x-hydro-dispatch",
+                new HtmlString(JsonSerializer.Serialize(data)),
+                HtmlAttributeValueStyle.SingleQuotes
+            )
         );
-        
+
         if (!string.IsNullOrWhiteSpace(BrowserTriggerEvent))
         {
             output.Attributes.Add("hydro-event", BrowserTriggerEvent);
         }
     }
-    
+
     private static string GetFullTypeName(Type type) =>
-        type.DeclaringType != null
-            ? type.DeclaringType.Name + "+" + type.Name
-            : type.Name;
+        type.DeclaringType != null ? type.DeclaringType.Name + "+" + type.Name : type.Name;
 }

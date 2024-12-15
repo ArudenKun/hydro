@@ -1,12 +1,12 @@
-﻿using System.Web;
+﻿using System.Text.Json;
+using System.Web;
+using Hydro.Configuration;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 using Microsoft.Extensions.DependencyInjection;
-using Hydro.Configuration;
-using Newtonsoft.Json;
 
 namespace Hydro.TagHelpers;
 
@@ -29,22 +29,22 @@ public sealed class HydroConfigMetaTagHelper : TagHelper
     public override void Process(TagHelperContext context, TagHelperOutput output)
     {
         var hydroOptions = ViewContext.HttpContext.RequestServices.GetService<HydroOptions>();
-        
-        var config = JsonConvert.SerializeObject(GetConfig(hydroOptions));
+
+        var config = JsonSerializer.Serialize(GetConfig(hydroOptions));
 
         output.Attributes.RemoveAll("content");
 
-        output.Attributes.Add(new TagHelperAttribute(
-            "content",
-            new HtmlString(config),
-            HtmlAttributeValueStyle.SingleQuotes)
+        output.Attributes.Add(
+            new TagHelperAttribute(
+                "content",
+                new HtmlString(config),
+                HtmlAttributeValueStyle.SingleQuotes
+            )
         );
     }
 
-    private object GetConfig(HydroOptions options) => new
-    {
-        Antiforgery = GetAntiforgeryConfig(options)
-    };
+    private object GetConfig(HydroOptions options) =>
+        new { Antiforgery = GetAntiforgeryConfig(options) };
 
     private AntiforgeryConfig GetAntiforgeryConfig(HydroOptions options)
     {
@@ -52,7 +52,7 @@ public sealed class HydroConfigMetaTagHelper : TagHelper
         {
             return null;
         }
-        
+
         var antiforgery = ViewContext.HttpContext.RequestServices.GetService<IAntiforgery>();
 
         return antiforgery?.GetAndStoreTokens(ViewContext.HttpContext) is { } tokens
