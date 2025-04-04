@@ -299,7 +299,7 @@ public abstract class HydroComponent : TagHelper, IViewContextAware
         catch (Exception e)
         {
             HandleError(e);
-            output.Content.SetHtmlContent(string.Empty);
+            throw;
         }
     }
 
@@ -574,11 +574,13 @@ public abstract class HydroComponent : TagHelper, IViewContextAware
         _componentId = componentId;
 
         PopulateBaseModel(persistentState);
-        await PopulateRequestModel();
+        
         if (!await AuthorizeAsync())
         {
             return string.Empty;
         }
+
+        await PopulateRequestModel();
 
         await TriggerEvent();
 
