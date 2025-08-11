@@ -1,14 +1,14 @@
 using System.Net.Mime;
 using System.Text.Encodings.Web;
+using System.Text.Json;
+using Hydro.Configuration;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using Hydro.Configuration;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace Hydro;
 
@@ -18,53 +18,66 @@ internal static class HydroComponentsExtensions
     {
         var componentName = componentType.Name;
 
-        app.MapPost($"/hydro/{componentName}/{{method?}}", async (
-            [FromServices] IServiceProvider serviceProvider,
-            [FromServices] IViewComponentHelper viewComponentHelper,
-            [FromServices] HydroOptions hydroOptions,
-            [FromServices] IAntiforgery antiforgery,
-            [FromServices] ILogger<HydroComponent> logger,
-            HttpContext httpContext,
-            string method
-        ) =>
-        {
-            if (hydroOptions.AntiforgeryTokenEnabled)
+        app.MapPost(
+            $"/hydro/{componentName}/{{method?}}",
+            async (
+                [FromServices] IServiceProvider serviceProvider,
+                [FromServices] IViewComponentHelper viewComponentHelper,
+                [FromServices] HydroOptions hydroOptions,
+                [FromServices] IAntiforgery antiforgery,
+                [FromServices] ILogger<HydroComponent> logger,
+                HttpContext httpContext,
+                string method
+            ) =>
             {
-                try
+                if (hydroOptions.AntiforgeryTokenEnabled)
                 {
-                    await antiforgery.ValidateRequestAsync(httpContext);
+                    try
+                    {
+                        await antiforgery.ValidateRequestAsync(httpContext);
+                    }
+                    catch (AntiforgeryValidationException exception)
+                    {
+                        logger.LogWarning(exception, "Antiforgery token not valid");
+                        var requestToken = antiforgery.GetTokens(httpContext).RequestToken;
+                        httpContext.Response.Headers.Append(
+                            HydroConsts.ResponseHeaders.RefreshToken,
+                            requestToken
+                        );
+                        return Results.BadRequest(new { token = requestToken });
+                    }
                 }
-                catch (AntiforgeryValidationException exception)
+
+                if (httpContext.IsHydro())
                 {
-                    logger.LogWarning(exception, "Antiforgery token not valid");
-                    var requestToken = antiforgery.GetTokens(httpContext).RequestToken;
-                    httpContext.Response.Headers.Append(HydroConsts.ResponseHeaders.RefreshToken, requestToken);
-                    return Results.BadRequest(new { token = requestToken });
+                    await ExecuteRequestOperations(httpContext, method);
                 }
-            }
 
-            if (httpContext.IsHydro())
-            {
-                await ExecuteRequestOperations(httpContext, method);
-            }
+                var htmlContent = await TagHelperRenderer.RenderTagHelper(
+                    componentType,
+                    httpContext
+                );
 
-            var htmlContent = await TagHelperRenderer.RenderTagHelper(componentType, httpContext);
+                if (
+                    httpContext.Response.Headers.ContainsKey(HydroConsts.ResponseHeaders.SkipOutput)
+                )
+                {
+                    return HydroEmptyResult.Instance;
+                }
 
-            if (httpContext.Response.Headers.ContainsKey(HydroConsts.ResponseHeaders.SkipOutput))
-            {
-                return HydroEmptyResult.Instance;
+                var content = await GetHtml(htmlContent);
+                return Results.Content(content, MediaTypeNames.Text.Html);
             }
-            
-            var content = await GetHtml(htmlContent);
-            return Results.Content(content, MediaTypeNames.Text.Html);
-        });
+        );
     }
 
     private static async Task ExecuteRequestOperations(HttpContext context, string method)
     {
         if (!context.Request.HasFormContentType)
         {
-            throw new InvalidOperationException("Hydro form doesn't contain form which is required");
+            throw new InvalidOperationException(
+                "Hydro form doesn't contain form which is required"
+            );
         }
 
         var hydroData = await context.Request.ReadFormAsync();
@@ -75,9 +88,16 @@ internal static class HydroComponentsExtensions
 
         var model = hydroData["__hydro_model"].First();
         var type = hydroData["__hydro_type"].First();
-        var parameters = JsonConvert.DeserializeObject<Dictionary<string, object>>(hydroData["__hydro_parameters"].FirstOrDefault("{}"), HydroComponent.JsonSerializerSettings);
-        var eventData = JsonConvert.DeserializeObject<HydroEventPayload>(hydroData["__hydro_event"].FirstOrDefault(string.Empty));
-        var componentIds = JsonConvert.DeserializeObject<string[]>(hydroData["__hydro_componentIds"].FirstOrDefault("[]"));
+        var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(
+            hydroData["__hydro_parameters"].FirstOrDefault("{}"),
+            HydroComponent.JsonSerializerSettings
+        );
+        var eventData = JsonSerializer.Deserialize<HydroEventPayload>(
+            hydroData["__hydro_event"].FirstOrDefault("{}")
+        );
+        var componentIds = JsonSerializer.Deserialize<string[]>(
+            hydroData["__hydro_componentIds"].FirstOrDefault("[]")
+        );
         var form = new FormCollection(formValues, hydroData.Files);
 
         context.Items.Add(HydroConsts.ContextItems.RenderedComponentIds, componentIds);

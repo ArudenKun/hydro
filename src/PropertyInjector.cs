@@ -1,11 +1,11 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Primitives;
-using Newtonsoft.Json;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Reflection;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Razor.TagHelpers;
+using Microsoft.Extensions.Primitives;
 
 namespace Hydro;
 
@@ -17,7 +17,7 @@ internal static class PropertyInjector
     public static string SerializeDeclaredProperties(Type type, object instance)
     {
         var regularProperties = GetRegularProperties(type, instance);
-        return JsonConvert.SerializeObject(regularProperties, HydroComponent.JsonSerializerSettings);
+        return JsonSerializer.Serialize(regularProperties, HydroComponent.JsonSerializerSettings);
     }
 
     private static IDictionary<string, object> GetRegularProperties(Type type, object instance) =>
@@ -34,13 +34,19 @@ internal static class PropertyInjector
         var hydroComponentType = typeof(HydroComponent);
 
         var baseProps = new[] { "Key", "IsModelTouched", "TouchedProperties" };
-        
-        var propertyInfos = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(p => (baseProps.Contains(p.Name) && p.DeclaringType == hydroComponentType)
-                        || (p.DeclaringType != viewComponentType && p.DeclaringType != hydroComponentType
-                            && p.GetGetMethod()?.IsPublic == true
-                            && p.GetSetMethod()?.IsPublic == true
-                            && !p.GetCustomAttributes<TransientAttribute>().Any())
+
+        var propertyInfos = type.GetProperties(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            )
+            .Where(p =>
+                (baseProps.Contains(p.Name) && p.DeclaringType == hydroComponentType)
+                || (
+                    p.DeclaringType != viewComponentType
+                    && p.DeclaringType != hydroComponentType
+                    && p.GetGetMethod()?.IsPublic == true
+                    && p.GetSetMethod()?.IsPublic == true
+                    && !p.GetCustomAttributes<TransientAttribute>().Any()
+                )
             )
             .ToArray();
 
@@ -93,14 +99,19 @@ internal static class PropertyInjector
         }
 
         var converter = TypeDescriptor.GetConverter(propertyInfo.PropertyType);
-        var convertedValue = value == null || value.GetType() == propertyInfo.PropertyType
-            ? value
-            : converter.ConvertFrom(value);
+        var convertedValue =
+            value == null || value.GetType() == propertyInfo.PropertyType
+                ? value
+                : converter.ConvertFrom(value);
 
         propertyInfo.SetValue(currentObject, convertedValue);
     }
 
-    public static (object Value, Action<object> Setter, Type PropertyType)? GetPropertySetter(object target, string propertyPath, object value)
+    public static (object Value, Action<object> Setter, Type PropertyType)? GetPropertySetter(
+        object target,
+        string propertyPath,
+        object value
+    )
     {
         if (target == null)
         {
@@ -188,7 +199,11 @@ internal static class PropertyInjector
         return (Convert.ToInt32(iteratorValue), cleanedPropName);
     }
 
-    private static (object, Action<object>, Type)? SetValueOnObject(object obj, string propName, object valueToSet)
+    private static (object, Action<object>, Type)? SetValueOnObject(
+        object obj,
+        string propName,
+        object valueToSet
+    )
     {
         if (obj == null)
         {
@@ -216,7 +231,11 @@ internal static class PropertyInjector
         return (convertedValue, val => propertyInfo.SetValue(obj, val), propertyInfo.PropertyType);
     }
 
-    private static (object, Action<object>, Type)? SetIndexedValue(object obj, string propName, object valueToSet)
+    private static (object, Action<object>, Type)? SetIndexedValue(
+        object obj,
+        string propName,
+        object valueToSet
+    )
     {
         var (index, cleanedPropName) = GetIndexAndCleanedPropertyName(propName);
         var propertyInfo = obj.GetType().GetProperty(cleanedPropName);
@@ -249,7 +268,9 @@ internal static class PropertyInjector
             return (convertedValue, val => list[index] = val, propertyInfo!.PropertyType);
         }
 
-        throw new InvalidOperationException($"Indexed access for property '{cleanedPropName}' is not supported.");
+        throw new InvalidOperationException(
+            $"Indexed access for property '{cleanedPropName}' is not supported."
+        );
     }
 
     private static object ConvertValue(object valueToConvert, Type destinationType)
@@ -259,17 +280,26 @@ internal static class PropertyInjector
             return valueToConvert;
         }
 
-        if (typeof(IFormFile).IsAssignableFrom(destinationType) && StringValues.IsNullOrEmpty(stringValues))
+        if (
+            typeof(IFormFile).IsAssignableFrom(destinationType)
+            && StringValues.IsNullOrEmpty(stringValues)
+        )
         {
             return null;
         }
-        
-        if (typeof(IFormFile[]).IsAssignableFrom(destinationType) && StringValues.IsNullOrEmpty(stringValues))
+
+        if (
+            typeof(IFormFile[]).IsAssignableFrom(destinationType)
+            && StringValues.IsNullOrEmpty(stringValues)
+        )
         {
             return Array.Empty<IFormFile>();
         }
-        
-        if (typeof(IEnumerable<IFormFile>).IsAssignableFrom(destinationType) && StringValues.IsNullOrEmpty(stringValues))
+
+        if (
+            typeof(IEnumerable<IFormFile>).IsAssignableFrom(destinationType)
+            && StringValues.IsNullOrEmpty(stringValues)
+        )
         {
             return new List<IFormFile>();
         }
@@ -278,7 +308,9 @@ internal static class PropertyInjector
 
         if (!converter.CanConvertFrom(typeof(string)))
         {
-            throw new InvalidOperationException($"Cannot convert StringValues to '{destinationType}'.");
+            throw new InvalidOperationException(
+                $"Cannot convert StringValues to '{destinationType}'."
+            );
         }
 
         if (!destinationType.IsArray || stringValues is { Count: <= 1 })

@@ -1,10 +1,10 @@
 ﻿using System.Linq.Expressions;
+using System.Text.Json;
 using Hydro.Utils;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
-using Newtonsoft.Json;
 using static Hydro.ExpressionExtensions;
 
 namespace Hydro.TagHelpers;
@@ -29,12 +29,13 @@ public sealed class HydroOnTagHelper : TagHelper
         get => _handlers ??= new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
         set => _handlers = value;
     }
-    
+
     /// <summary />
     [HtmlAttributeName(DictionaryAttributePrefix = HandlersPrefixShort)]
     public IDictionary<string, Expression> HandlersShort
     {
-        get => _handlersShort ??= new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+        get =>
+            _handlersShort ??= new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
         set => _handlersShort = value;
     }
 
@@ -55,10 +56,12 @@ public sealed class HydroOnTagHelper : TagHelper
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(output);
 
-        var modelType = ViewContext?.ViewData.ModelMetadata.ContainerType ?? ViewContext?.ViewData.Model?.GetType();
+        var modelType =
+            ViewContext?.ViewData.ModelMetadata.ContainerType
+            ?? ViewContext?.ViewData.Model?.GetType();
 
         var handlers = _handlersShort ?? _handlers;
-        
+
         if (modelType == null || handlers == null)
         {
             return;
@@ -68,7 +71,9 @@ public sealed class HydroOnTagHelper : TagHelper
         {
             if (eventItem.Value is not LambdaExpression actionExpression)
             {
-                throw new InvalidOperationException($"Wrong event handler statement in component for {modelType.Namespace}");
+                throw new InvalidOperationException(
+                    $"Wrong event handler statement in component for {modelType.Namespace}"
+                );
             }
 
             var jsExpression = GetJsExpression(actionExpression);
@@ -80,7 +85,13 @@ public sealed class HydroOnTagHelper : TagHelper
 
             var eventDefinition = eventItem.Key;
             output.Attributes.RemoveAll(HandlersPrefix + eventDefinition);
-            output.Attributes.Add(new TagHelperAttribute($"x-on:{eventDefinition}", new HtmlString(jsExpression), HtmlAttributeValueStyle.SingleQuotes));
+            output.Attributes.Add(
+                new TagHelperAttribute(
+                    $"x-on:{eventDefinition}",
+                    new HtmlString(jsExpression),
+                    HtmlAttributeValueStyle.SingleQuotes
+                )
+            );
 
             if (Disable || new[] { "click", "submit" }.Any(e => e.StartsWith(e)))
             {
@@ -97,7 +108,7 @@ public sealed class HydroOnTagHelper : TagHelper
         }
 
         var methodDeclaringType = methodCall.Method.DeclaringType;
-        
+
         if (methodDeclaringType == typeof(HydroClientActions))
         {
             return GetClientActionExpression(expression);
@@ -105,13 +116,13 @@ public sealed class HydroOnTagHelper : TagHelper
 
         return GetActionInvokeExpression(expression);
     }
-    
+
     private static string GetClientActionExpression(LambdaExpression expression)
     {
         var methodCall = (MethodCallExpression)expression.Body;
 
         var methodName = methodCall.Method.Name;
-        
+
         switch (methodName)
         {
             case nameof(HydroClientActions.ExecuteJs):
@@ -128,7 +139,10 @@ public sealed class HydroOnTagHelper : TagHelper
         }
     }
 
-    private static string GetDispatchInvokeExpression(LambdaExpression expression, string methodName)
+    private static string GetDispatchInvokeExpression(
+        LambdaExpression expression,
+        string methodName
+    )
     {
         var dispatchData = expression.GetNameAndParameters();
 
@@ -138,11 +152,12 @@ public sealed class HydroOnTagHelper : TagHelper
         }
 
         var parameters = dispatchData.Value.Parameters;
-                
+
         var data = parameters["data"];
-        var scope = methodName == nameof(HydroComponent.DispatchGlobal) 
-            ? Scope.Global 
-            : GetParam<Scope>(parameters, "scope");
+        var scope =
+            methodName == nameof(HydroComponent.DispatchGlobal)
+                ? Scope.Global
+                : GetParam<Scope>(parameters, "scope");
         var subject = GetParam<string>(parameters, "subject");
 
         var invokeData = new
@@ -150,25 +165,30 @@ public sealed class HydroOnTagHelper : TagHelper
             name = GetFullTypeName(data.GetType()),
             data = Base64.Serialize(data),
             scope = scope.ToString().ToLower(),
-            subject = subject
+            subject = subject,
         };
 
-        var invokeJson = JsonConvert.SerializeObject(invokeData, JsonSettings.SerializerSettings);
+        var invokeJson = JsonSerializer.Serialize(invokeData, JsonSettings.SerializerSettings);
         var invokeJsObject = DecodeJsExpressionsInJson(invokeJson);
 
         return $"dispatch($event, {invokeJsObject})";
     }
 
-    private static T GetParam<T>(IDictionary<string, object> parameters, string name, T fallback = default) =>
-        (T)(parameters.TryGetValue(name, out var value)
-            ? value is T ? value : default(T)
-            : default(T)
+    private static T GetParam<T>(
+        IDictionary<string, object> parameters,
+        string name,
+        T fallback = default
+    ) =>
+        (T)(
+            parameters.TryGetValue(name, out var value)
+                ? value is T
+                    ? value
+                    : default(T)
+                : default(T)
         );
 
     private static string GetFullTypeName(Type type) =>
-        type.DeclaringType != null
-            ? type.DeclaringType.Name + "+" + type.Name
-            : type.Name;
+        type.DeclaringType != null ? type.DeclaringType.Name + "+" + type.Name : type.Name;
 
     private static string GetActionInvokeExpression(LambdaExpression expression)
     {
@@ -179,11 +199,10 @@ public sealed class HydroOnTagHelper : TagHelper
             return null;
         }
 
-        var invokeJson = JsonConvert.SerializeObject(new
-        {
-            eventData.Value.Name,
-            eventData.Value.Parameters
-        }, JsonSettings.SerializerSettings);
+        var invokeJson = JsonSerializer.Serialize(
+            new { eventData.Value.Name, eventData.Value.Parameters },
+            JsonSettings.SerializerSettings
+        );
 
         var invokeJsObject = DecodeJsExpressionsInJson(invokeJson);
 
