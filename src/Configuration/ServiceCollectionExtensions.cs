@@ -1,5 +1,4 @@
-﻿using Hydro.Services;
-using Microsoft.AspNetCore.Http;
+﻿using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -11,18 +10,34 @@ namespace Hydro.Configuration;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Configures services required by 
+    /// Configures services required by
     /// </summary>
     /// <param name="services"></param>
-    /// <param name="options"></param>
+    /// <param name="configure"></param>
     /// <returns></returns>
-    public static IServiceCollection AddHydro(this IServiceCollection services, Action<HydroOptions> options = null)
-    {
-        var hydroOptions = new HydroOptions();
-        options?.Invoke(hydroOptions);
-        services.AddSingleton(hydroOptions);
-        services.TryAddSingleton<IPersistentState, PersistentState>();
+    public static IServiceCollection AddHydro(
+        this IServiceCollection services,
+        [CanBeNull] Action<HydroOptions> configure = null
+    ) => services.AddHydro((_, options) => configure?.Invoke(options));
 
+    /// <summary>
+    /// Configures services required by
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configure"></param>
+    /// <returns></returns>
+    public static IServiceCollection AddHydro(
+        this IServiceCollection services,
+        [CanBeNull] Action<IServiceProvider, HydroOptions> configure = null
+    )
+    {
+        services.AddSingleton(sp =>
+        {
+            var options = new HydroOptions();
+            configure?.Invoke(sp, options);
+            return options;
+        });
+        services.TryAddSingleton<IPersistentState, PersistentState>();
         return services;
     }
 }
