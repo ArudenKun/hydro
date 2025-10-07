@@ -321,7 +321,7 @@ public abstract class HydroComponent : TagHelper, IViewContextAware
 
         if (view == null)
         {
-            throw new InvalidOperationException($"The view '{GetViewPath()}' was not found.");
+            throw new HydroException($"The view '{GetViewPath()}' was not found.");
         }
 
         _writer = new StringWriter();
@@ -550,6 +550,17 @@ public abstract class HydroComponent : TagHelper, IViewContextAware
         var cacheValue = new Cache<T>(func);
         cache.TryAdd(cacheKey, cacheValue);
         return cacheValue;
+    }
+
+    /// <summary>
+    /// Skips generating the HTML output after executing the decorated Hydro action.
+    /// Any changes to the state won't be persisted.
+    /// Useful when action is performing only side effects that do not cause changes to the current component's HTML content.
+    /// </summary>
+    protected void SkipOutput()
+    {
+        _skipOutput = true;
+        HttpContext.Response.Headers.TryAdd(HydroConsts.ResponseHeaders.SkipOutput, "True");
     }
 
     private async Task<string> RenderOnlineComponent(IPersistentState persistentState) =>
@@ -983,8 +994,7 @@ public abstract class HydroComponent : TagHelper, IViewContextAware
 
         if (methodAttributes.Any(a => a.GetType() == typeof(SkipOutputAttribute)))
         {
-            _skipOutput = true;
-            HttpContext.Response.Headers.TryAdd(HydroConsts.ResponseHeaders.SkipOutput, "True");
+            SkipOutput();
         }
 
         var operationId = HttpContext.Request.Headers.TryGetValue(
